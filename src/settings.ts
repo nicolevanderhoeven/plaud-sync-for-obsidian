@@ -95,6 +95,16 @@ export class PlaudSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
+			.setName('Download audio files')
+			.setDesc('Save the original mp3 recording alongside each synced note.')
+			.addToggle((toggle) => toggle
+				.setValue(this.plugin.settings.downloadAudio)
+				.onChange(async (value) => {
+					this.plugin.settings.downloadAudio = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
 			.setName('Filename pattern')
 			.setDesc('Pattern used for new synced files.')
 			.addText((text) => text

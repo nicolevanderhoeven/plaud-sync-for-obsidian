@@ -45,9 +45,15 @@ export type PlaudRequest = {
 export type PlaudRequestResult = {status: number; json: unknown};
 export type PlaudRequestFn = (request: PlaudRequest) => Promise<PlaudRequestResult>;
 
+export interface PlaudAudioUrl {
+	mp3: string;
+	opus: string;
+}
+
 export interface PlaudApiClient {
 	listFiles(): Promise<PlaudFileSummary[]>;
 	getFileDetail(fileId: string): Promise<PlaudFileDetail>;
+	getFileAudioUrl(fileId: string): Promise<PlaudAudioUrl>;
 }
 
 export interface CreatePlaudApiClientOptions {
@@ -194,6 +200,21 @@ function normalizeFileDetail(raw: unknown): PlaudFileDetail {
 	return detail as PlaudFileDetail;
 }
 
+function extractAudioUrl(json: unknown): PlaudAudioUrl {
+	if (!isRecord(json)) {
+		throw new PlaudApiError('invalid_response', 'Plaud audio URL response is malformed.');
+	}
+
+	const mp3 = typeof json.temp_url === 'string' ? json.temp_url.trim() : '';
+	const opus = typeof json.temp_url_opus === 'string' ? json.temp_url_opus.trim() : '';
+
+	if (!mp3 && !opus) {
+		throw new PlaudApiError('invalid_response', 'Plaud audio URL response contains no download links.');
+	}
+
+	return {mp3, opus};
+}
+
 function extractDetailPayload(json: unknown): PlaudFileDetail {
 	if (!isRecord(json)) {
 		throw new PlaudApiError('invalid_response', 'Plaud file detail payload is malformed.');
@@ -243,6 +264,19 @@ export function createPlaudApiClient(options: CreatePlaudApiClientOptions): Plau
 			});
 
 			return extractDetailPayload(json);
+		},
+
+		async getFileAudioUrl(fileId: string): Promise<PlaudAudioUrl> {
+			const json = await requestJson(request, {
+				url: `${apiDomain}/file/temp-url/${encodeURIComponent(fileId)}`,
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${token}`
+				},
+				throw: false
+			});
+
+			return extractAudioUrl(json);
 		}
 	};
 }

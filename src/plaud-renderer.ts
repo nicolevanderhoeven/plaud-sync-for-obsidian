@@ -31,14 +31,19 @@ function renderHighlights(highlights: string[]): string {
 	return highlights.map((highlight) => `- ${highlight}`).join('\n');
 }
 
-export function renderPlaudMarkdown(detail: NormalizedPlaudDetail): string {
+export interface RenderPlaudMarkdownOptions {
+	audioFilename?: string;
+}
+
+export function renderPlaudMarkdown(detail: NormalizedPlaudDetail, options?: RenderPlaudMarkdownOptions): string {
 	const title = normalizeTitle(detail.title);
 	const date = formatDate(detail.startAtMs);
 	const duration = formatDuration(detail.durationMs);
 	const summary = detail.summary.trim() || 'No summary available.';
 	const transcript = detail.transcript.trim() || 'No transcript available.';
 
-	return [
+	const audioFilename = options?.audioFilename?.trim() ?? '';
+	const sections: string[] = [
 		'---',
 		'source: plaud',
 		'type: recording',
@@ -49,7 +54,14 @@ export function renderPlaudMarkdown(detail: NormalizedPlaudDetail): string {
 		'---',
 		'',
 		`# ${title}`,
-		'',
+		''
+	];
+
+	if (audioFilename) {
+		sections.push('## Audio', `![[${audioFilename}]]`, '');
+	}
+
+	sections.push(
 		'## Summary',
 		summary,
 		'',
@@ -59,5 +71,7 @@ export function renderPlaudMarkdown(detail: NormalizedPlaudDetail): string {
 		'## Transcript',
 		transcript,
 		''
-	].join('\n');
+	);
+
+	return sections.join('\n');
 }

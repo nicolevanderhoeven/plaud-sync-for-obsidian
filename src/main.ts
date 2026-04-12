@@ -8,7 +8,7 @@ import {getPlaudToken} from './secret-store';
 import {normalizePlaudDetail} from './plaud-normalizer';
 import {renderPlaudMarkdown} from './plaud-renderer';
 import {isTrashedFile, runPlaudSync, type PlaudSyncSummary} from './plaud-sync';
-import {type PlaudVaultAdapter, upsertPlaudNote} from './plaud-vault';
+import {type PlaudVaultAdapter, upsertPlaudNote, buildPlaudAudioFilename} from './plaud-vault';
 import {PlaudApiError, type PlaudApiClient, type PlaudFileDetail} from './plaud-api';
 import {DEFAULT_RETRY_POLICY, sanitizeTelemetryMessage, type RetryTelemetryEvent, withRetry} from './plaud-retry';
 import {hydratePlaudDetailContent} from './plaud-content-hydrator';
@@ -139,6 +139,7 @@ export default class PlaudSyncPlugin extends Plugin {
 		});
 		const resilientApi: PlaudApiClient = {
 			listFiles: async () => this.retryApiCall('sync.list_files', async () => api.listFiles()),
+			getFileAudioUrl: async (fileId: string) => this.retryApiCall(`sync.audio_url.${fileId}`, async () => api.getFileAudioUrl(fileId)),
 			getFileDetail: async (fileId: string) => {
 				const detail = await this.retryApiCall(`sync.file_detail.${fileId}`, async () => api.getFileDetail(fileId));
 				const hydrated = await hydratePlaudDetailContent(detail, async (url) => {
@@ -153,13 +154,16 @@ export default class PlaudSyncPlugin extends Plugin {
 			}
 		};
 
+		const vault = this.createVaultAdapter();
+
 		return runPlaudSync({
 			api: resilientApi,
-			vault: this.createVaultAdapter(),
+			vault,
 			settings: {
 				syncFolder: this.settings.syncFolder,
 				filenamePattern: this.settings.filenamePattern,
 				updateExisting: this.settings.updateExisting,
+				downloadAudio: this.settings.downloadAudio,
 				lastSyncAtMs: this.settings.lastSyncAtMs
 			},
 			saveCheckpoint: async (nextLastSyncAtMs) => {
@@ -168,7 +172,25 @@ export default class PlaudSyncPlugin extends Plugin {
 			},
 			normalizeDetail: normalizePlaudDetail,
 			renderMarkdown: renderPlaudMarkdown,
-			upsertNote: upsertPlaudNote
+			upsertNote: upsertPlaudNote,
+			buildAudioFilename: buildPlaudAudioFilename,
+			downloadAudio: async (fileId, destPath) => {
+				const audioUrl = await this.retryApiCall(
+					`sync.audio_url.${fileId}`,
+					async () => resilientApi.getFileAudioUrl(fileId)
+				);
+				const url = audioUrl.mp3 || audioUrl.opus;
+				if (!url) {
+					throw new Error(`No audio download URL available for ${fileId}.`);
+				}
+
+				const data = await this.retryApiCall(
+					`sync.audio_download.${fileId}`,
+					async () => this.fetchSignedBinary(url)
+				);
+				await vault.ensureFolder(destPath.slice(0, destPath.lastIndexOf('/')));
+				await vault.createBinary(destPath, data);
+			}
 		});
 	}
 
@@ -200,6 +222,20 @@ export default class PlaudSyncPlugin extends Plugin {
 			status: error instanceof PlaudApiError && typeof error.status === 'number' ? error.status : null,
 			message: sanitizeTelemetryMessage(toErrorMessage(error))
 		});
+	}
+
+	private async fetchSignedBinary(url: string): Promise<ArrayBuffer> {
+		const response = await requestUrl({
+			url,
+			method: 'GET',
+			throw: false
+		});
+
+		if (response.status >= 400) {
+			throw new Error(`Audio download failed with HTTP ${response.status}.`);
+		}
+
+		return response.arrayBuffer;
 	}
 
 	private async fetchSignedContent(url: string): Promise<unknown> {
@@ -268,6 +304,12 @@ export default class PlaudSyncPlugin extends Plugin {
 			},
 			create: async (path, content) => {
 				await this.app.vault.create(path, content);
+			},
+			createBinary: async (path, data) => {
+				await this.app.vault.createBinary(path, data);
+			},
+			fileExists: (path) => {
+				return this.app.vault.getAbstractFileByPath(path) !== null;
 			}
 		};
 	}

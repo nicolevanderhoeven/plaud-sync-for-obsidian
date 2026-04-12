@@ -4,6 +4,8 @@ export interface PlaudVaultAdapter {
 	read(path: string): Promise<string>;
 	write(path: string, content: string): Promise<void>;
 	create(path: string, content: string): Promise<void>;
+	createBinary(path: string, data: ArrayBuffer): Promise<void>;
+	fileExists(path: string): boolean;
 }
 
 export interface BuildFilenameInput {
@@ -103,6 +105,11 @@ export function buildPlaudFilename(input: BuildFilenameInput): string {
 	const filled = replacedDate.replace(/\{title\}/g, slugify(input.title));
 	const filename = slugify(filled).replace(/^-+|-+$/g, '');
 	return `${filename || 'plaud-recording'}.md`;
+}
+
+export function buildPlaudAudioFilename(input: BuildFilenameInput): string {
+	const mdName = buildPlaudFilename(input);
+	return mdName.replace(/\.md$/, '.mp3');
 }
 
 function resolveAvailablePath(folder: string, initialFileName: string, existingPaths: Set<string>): string {

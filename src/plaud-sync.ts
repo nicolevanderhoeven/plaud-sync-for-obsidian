@@ -6,6 +6,7 @@ export interface PlaudSyncSettings {
 	syncFolder: string;
 	filenamePattern: string;
 	updateExisting: boolean;
+	downloadAudio: boolean;
 	lastSyncAtMs: number;
 }
 
@@ -32,7 +33,7 @@ export interface RunPlaudSyncInput {
 	settings: PlaudSyncSettings;
 	saveCheckpoint: (nextLastSyncAtMs: number) => Promise<void>;
 	normalizeDetail: (raw: unknown) => NormalizedPlaudDetail;
-	renderMarkdown: (detail: NormalizedPlaudDetail) => string;
+	renderMarkdown: (detail: NormalizedPlaudDetail, options?: {audioFilename?: string}) => string;
 	upsertNote: (input: {
 		vault: PlaudVaultAdapter;
 		syncFolder: string;
@@ -43,6 +44,8 @@ export interface RunPlaudSyncInput {
 		date: string;
 		markdown: string;
 	}) => Promise<UpsertPlaudNoteResult>;
+	downloadAudio?: (fileId: string, destPath: string) => Promise<void>;
+	buildAudioFilename?: (input: {filenamePattern: string; date: string; title: string}) => string;
 }
 
 function normalizeTimestampMs(value: unknown): number {
@@ -125,13 +128,32 @@ export async function runPlaudSync(input: RunPlaudSyncInput): Promise<PlaudSyncS
 	let checkpointCandidate = checkpointBefore;
 	const failures: PlaudSyncFailure[] = [];
 
+	const shouldDownloadAudio = input.settings.downloadAudio && typeof input.downloadAudio === 'function';
+
 	for (const summary of selected) {
 		const fileId = resolveFileId(summary);
 
 		try {
 			const detail = await input.api.getFileDetail(fileId);
 			const normalized = input.normalizeDetail(detail);
-			const markdown = input.renderMarkdown(normalized);
+			const date = formatDate(normalized.startAtMs);
+
+			let audioFilename: string | undefined;
+			if (shouldDownloadAudio && input.buildAudioFilename) {
+				audioFilename = input.buildAudioFilename({
+					filenamePattern: input.settings.filenamePattern,
+					date,
+					title: normalized.title
+				});
+				const folder = input.settings.syncFolder.replace(/\/+$/, '').trim() || 'Plaud';
+				const audioPath = `${folder}/${audioFilename}`;
+
+				if (!input.vault.fileExists(audioPath)) {
+					await input.downloadAudio!(fileId, audioPath);
+				}
+			}
+
+			const markdown = input.renderMarkdown(normalized, {audioFilename});
 			const upsertResult = await input.upsertNote({
 				vault: input.vault,
 				syncFolder: input.settings.syncFolder,
@@ -139,7 +161,7 @@ export async function runPlaudSync(input: RunPlaudSyncInput): Promise<PlaudSyncS
 				updateExisting: input.settings.updateExisting,
 				fileId: normalized.fileId,
 				title: normalized.title,
-				date: formatDate(normalized.startAtMs),
+				date,
 				markdown
 			});
 
