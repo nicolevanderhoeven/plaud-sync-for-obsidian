@@ -59,3 +59,47 @@ test('concurrent sync attempts are prevented with clear messaging', async () => 
   const firstResult = await first;
   assert.equal(firstResult, true);
 });
+
+test('auto sync runs sync with auto trigger', async () => {
+  const triggers = [];
+
+  const runtime = createPlaudSyncRuntime({
+    isStartupEnabled: () => true,
+    runSync: async (trigger) => {
+      triggers.push(trigger);
+    },
+    onLocked: () => {}
+  });
+
+  const ran = await runtime.runAutoSync();
+
+  assert.equal(ran, true);
+  assert.deepEqual(triggers, ['auto']);
+});
+
+test('auto sync skips silently when sync is in flight', async () => {
+  let release;
+  const notices = [];
+
+  const runtime = createPlaudSyncRuntime({
+    isStartupEnabled: () => true,
+    runSync: async () => {
+      await new Promise((resolve) => {
+        release = resolve;
+      });
+    },
+    onLocked: (message) => {
+      notices.push(message);
+    }
+  });
+
+  const first = runtime.runManualSync();
+  await Promise.resolve();
+  const autoResult = await runtime.runAutoSync();
+
+  assert.equal(autoResult, false);
+  assert.deepEqual(notices, [], 'auto sync should not fire onLocked');
+
+  release();
+  await first;
+});

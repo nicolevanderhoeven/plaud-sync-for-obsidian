@@ -12,6 +12,7 @@ import {type PlaudVaultAdapter, upsertPlaudNote} from './plaud-vault';
 import {PlaudApiError, type PlaudApiClient, type PlaudFileDetail} from './plaud-api';
 import {DEFAULT_RETRY_POLICY, sanitizeTelemetryMessage, type RetryTelemetryEvent, withRetry} from './plaud-retry';
 import {hydratePlaudDetailContent} from './plaud-content-hydrator';
+import {createAutoSyncBackoff, type AutoSyncBackoff} from './auto-sync-backoff';
 
 function toErrorMessage(error: unknown): string {
 	if (error instanceof Error && error.message.trim().length > 0) {
@@ -50,6 +51,8 @@ function formatSyncSummary(summary: PlaudSyncSummary): string {
 export default class PlaudSyncPlugin extends Plugin {
 	settings: PlaudPluginSettings;
 	private syncRuntime: PlaudSyncRuntime | null = null;
+	private autoSyncIntervalId: number | null = null;
+	private autoSyncBackoff: AutoSyncBackoff = createAutoSyncBackoff();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -64,6 +67,7 @@ export default class PlaudSyncPlugin extends Plugin {
 		registerPlaudCommands(this);
 		this.addSettingTab(new PlaudSettingTab(this.app, this));
 
+		this.startAutoSync();
 		void this.syncRuntime.runStartupSync();
 	}
 
@@ -73,6 +77,12 @@ export default class PlaudSyncPlugin extends Plugin {
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(toPersistedSettings(this.settings));
+	}
+
+	restartAutoSync(): void {
+		this.autoSyncBackoff.reset();
+		this.clearAutoSync();
+		this.startAutoSync();
 	}
 
 	async runPlaudSyncNow(): Promise<void> {
@@ -101,6 +111,27 @@ export default class PlaudSyncPlugin extends Plugin {
 		}
 	}
 
+	private startAutoSync(): void {
+		const minutes = this.settings.autoSyncIntervalMinutes;
+		if (minutes <= 0) {
+			return;
+		}
+
+		const intervalMs = minutes * 60 * 1000;
+		const id = window.setInterval(() => {
+			void this.ensureSyncRuntime().runAutoSync();
+		}, intervalMs);
+		this.autoSyncIntervalId = id;
+		this.registerInterval(id);
+	}
+
+	private clearAutoSync(): void {
+		if (this.autoSyncIntervalId !== null) {
+			window.clearInterval(this.autoSyncIntervalId);
+			this.autoSyncIntervalId = null;
+		}
+	}
+
 	private ensureSyncRuntime(): PlaudSyncRuntime {
 		if (!this.syncRuntime) {
 			this.syncRuntime = createPlaudSyncRuntime({
@@ -118,11 +149,18 @@ export default class PlaudSyncPlugin extends Plugin {
 	private async runSync(trigger: SyncTrigger): Promise<void> {
 		try {
 			const summary = await this.executeSyncBatch();
+			this.autoSyncBackoff.recordSuccess();
 			if (trigger === 'manual') {
 				new Notice(formatSyncSummary(summary));
 			}
 		} catch (error) {
 			this.logFailure('sync_failed', error);
+			if (trigger === 'auto' && this.autoSyncBackoff.recordFailure()) {
+				this.clearAutoSync();
+				new Notice('Plaud auto-sync paused after repeated failures. Sync manually or adjust settings to resume.');
+				return;
+			}
+
 			new Notice(`Plaud sync failed: ${toActionableMessage(error)}`);
 		}
 	}

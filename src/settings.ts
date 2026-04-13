@@ -1,7 +1,7 @@
 import {App, Notice, PluginSettingTab, Setting} from 'obsidian';
 import type PlaudSyncPlugin from './main';
 import {clearPlaudToken, getPlaudToken, setPlaudToken} from './secret-store';
-import {DEFAULT_SETTINGS} from './settings-schema';
+import {DEFAULT_SETTINGS, MIN_AUTO_SYNC_MINUTES} from './settings-schema';
 
 export class PlaudSettingTab extends PluginSettingTab {
 	plugin: PlaudSyncPlugin;
@@ -82,6 +82,24 @@ export class PlaudSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					this.plugin.settings.syncOnStartup = value;
 					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Auto-sync interval')
+			.setDesc(`Sync automatically every N minutes. Set to 0 to disable. Minimum ${MIN_AUTO_SYNC_MINUTES} minutes when enabled.`)
+			.addText((text) => text
+				.setPlaceholder('0')
+				.setValue(String(this.plugin.settings.autoSyncIntervalMinutes))
+				.onChange(async (value) => {
+					const parsed = Number.parseInt(value, 10);
+					if (!Number.isFinite(parsed) || parsed <= 0) {
+						this.plugin.settings.autoSyncIntervalMinutes = 0;
+					} else {
+						this.plugin.settings.autoSyncIntervalMinutes = Math.max(parsed, MIN_AUTO_SYNC_MINUTES);
+					}
+
+					await this.plugin.saveSettings();
+					this.plugin.restartAutoSync();
 				}));
 
 		new Setting(containerEl)

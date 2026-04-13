@@ -2,15 +2,19 @@ export interface PlaudPluginSettings {
 	apiDomain: string;
 	syncFolder: string;
 	syncOnStartup: boolean;
+	autoSyncIntervalMinutes: number;
 	updateExisting: boolean;
 	filenamePattern: string;
 	lastSyncAtMs: number;
 }
 
+export const MIN_AUTO_SYNC_MINUTES = 5;
+
 export const DEFAULT_SETTINGS: PlaudPluginSettings = {
 	apiDomain: 'https://api.plaud.ai',
 	syncFolder: 'Plaud',
 	syncOnStartup: true,
+	autoSyncIntervalMinutes: 0,
 	updateExisting: true,
 	filenamePattern: 'plaud-{timestamp}',
 	lastSyncAtMs: 0
@@ -41,6 +45,14 @@ function readTimestampMs(value: unknown, fallback: number): number {
 	return Math.floor(value);
 }
 
+function readAutoSyncInterval(value: unknown): number {
+	if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+		return 0;
+	}
+
+	return Math.max(Math.floor(value), MIN_AUTO_SYNC_MINUTES);
+}
+
 export function normalizeSettings(raw: unknown): PlaudPluginSettings {
 	const persisted = isRecord(raw) ? raw : {};
 
@@ -48,6 +60,7 @@ export function normalizeSettings(raw: unknown): PlaudPluginSettings {
 		apiDomain: readString(persisted.apiDomain, DEFAULT_SETTINGS.apiDomain),
 		syncFolder: readString(persisted.syncFolder, DEFAULT_SETTINGS.syncFolder),
 		syncOnStartup: readBoolean(persisted.syncOnStartup, DEFAULT_SETTINGS.syncOnStartup),
+		autoSyncIntervalMinutes: readAutoSyncInterval(persisted.autoSyncIntervalMinutes),
 		updateExisting: readBoolean(persisted.updateExisting, DEFAULT_SETTINGS.updateExisting),
 		filenamePattern: readString(persisted.filenamePattern, DEFAULT_SETTINGS.filenamePattern),
 		lastSyncAtMs: readTimestampMs(persisted.lastSyncAtMs, DEFAULT_SETTINGS.lastSyncAtMs)

@@ -1,4 +1,4 @@
-export type SyncTrigger = 'manual' | 'startup';
+export type SyncTrigger = 'manual' | 'startup' | 'auto';
 
 export interface PlaudSyncRuntimeOptions {
 	isStartupEnabled: () => boolean;
@@ -11,17 +11,13 @@ const LOCKED_MESSAGE = 'Plaud sync already running. Please wait for current run 
 export interface PlaudSyncRuntime {
 	runManualSync(): Promise<boolean>;
 	runStartupSync(): Promise<boolean>;
+	runAutoSync(): Promise<boolean>;
 }
 
 export function createPlaudSyncRuntime(options: PlaudSyncRuntimeOptions): PlaudSyncRuntime {
 	let inFlight: Promise<void> | null = null;
 
-	const runWithLock = async (trigger: SyncTrigger): Promise<boolean> => {
-		if (inFlight) {
-			options.onLocked(LOCKED_MESSAGE);
-			return false;
-		}
-
+	const acquireAndRun = async (trigger: SyncTrigger): Promise<boolean> => {
 		const runPromise = options.runSync(trigger);
 		inFlight = runPromise;
 
@@ -35,6 +31,15 @@ export function createPlaudSyncRuntime(options: PlaudSyncRuntimeOptions): PlaudS
 		}
 	};
 
+	const runWithLock = async (trigger: SyncTrigger): Promise<boolean> => {
+		if (inFlight) {
+			options.onLocked(LOCKED_MESSAGE);
+			return false;
+		}
+
+		return acquireAndRun(trigger);
+	};
+
 	return {
 		runManualSync: () => runWithLock('manual'),
 		runStartupSync: () => {
@@ -43,6 +48,13 @@ export function createPlaudSyncRuntime(options: PlaudSyncRuntimeOptions): PlaudS
 			}
 
 			return runWithLock('startup');
+		},
+		runAutoSync: () => {
+			if (inFlight) {
+				return Promise.resolve(false);
+			}
+
+			return acquireAndRun('auto');
 		}
 	};
 }

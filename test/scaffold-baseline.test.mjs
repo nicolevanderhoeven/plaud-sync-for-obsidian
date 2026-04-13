@@ -18,8 +18,7 @@ const forbiddenMainPatterns = [
   'open-modal-simple',
   'open-modal-complex',
   'replace-selected',
-  "registerDomEvent(document, 'click'",
-  'setInterval('
+  "registerDomEvent(document, 'click'"
 ];
 
 test('manifest is rebranded for Plaud sync plugin identity', () => {
