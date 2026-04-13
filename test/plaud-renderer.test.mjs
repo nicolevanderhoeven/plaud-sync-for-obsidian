@@ -35,7 +35,9 @@ test('renders frontmatter contract fields', () => {
 test('renders required body sections in order', () => {
   const markdown = renderPlaudMarkdown(sampleDetail);
 
-  const summaryIndex = markdown.indexOf('## Summary');
+  assert.ok(!markdown.includes('## Summary'), 'should not wrap summary in ## Summary heading');
+
+  const summaryIndex = markdown.indexOf('Summary text');
   const highlightsIndex = markdown.indexOf('## Highlights');
   const transcriptIndex = markdown.indexOf('## Transcript');
 
@@ -70,7 +72,7 @@ test('gracefully renders placeholders for missing optional fields', () => {
 
   assert.match(markdown, /# Untitled recording/);
   assert.match(markdown, /No summary available\./);
-  assert.match(markdown, /- No highlights extracted\./);
+  assert.ok(!markdown.includes('## Highlights'), 'should omit empty highlights section');
   assert.match(markdown, /No transcript available\./);
 });
 

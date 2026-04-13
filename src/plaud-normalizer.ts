@@ -18,11 +18,13 @@ function asString(value: unknown): string {
 	return typeof value === 'string' ? value.trim() : '';
 }
 
-function stripMarkup(value: string): string {
+function stripHtml(value: string): string {
 	return value
-		.replace(/<[^>]*>/g, ' ')
-		.replace(/!\[.*?\]\(.*?\)/g, ' ')
-		.replace(/\s+/g, ' ')
+		.replace(/<[^>]*>/g, '')
+		.replace(/!\[.*?\]\(.*?\)/g, '')
+		.replace(/[ \t]+/g, ' ')
+		.replace(/^ /gm, '')
+		.replace(/\n{3,}/g, '\n\n')
 		.trim();
 }
 
@@ -75,7 +77,7 @@ function extractSummary(detail: Record<string, unknown>): string {
 		const dataId = firstNonEmptyString([item.data_id]).toLowerCase();
 		if (dataId.startsWith('auto_sum:') || dataId.includes('summary')) {
 			const content = firstNonEmptyString([item.data_content, item.content, item.value, item.text]);
-			const cleaned = stripMarkup(content);
+			const cleaned = stripHtml(content);
 			if (cleaned) {
 				return cleaned;
 			}
@@ -170,7 +172,7 @@ function extractHighlights(detail: Record<string, unknown>): string[] {
 				}
 			}
 		} catch {
-			const fallback = stripMarkup(content);
+			const fallback = stripHtml(content);
 			if (fallback) {
 				return [fallback];
 			}
@@ -180,17 +182,32 @@ function extractHighlights(detail: Record<string, unknown>): string[] {
 	return [];
 }
 
+function formatOffsetTimestamp(ms: number): string {
+	const totalSeconds = Math.floor(ms / 1000);
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
 function normalizeTranscriptLine(entry: unknown): string {
 	if (!isRecord(entry)) {
 		return '';
 	}
 
-	const speaker = firstNonEmptyString([entry.speaker, entry.speaker_name, entry.name]) || 'Speaker';
 	const text = firstNonEmptyString([entry.text, entry.content, entry.value]);
 	if (!text) {
 		return '';
 	}
-	return `${speaker}: ${text}`;
+
+	const offsetMs = asNonNegativeNumber(
+		entry.start_time ?? entry.begin_time ?? entry.start ?? entry.offset ?? entry.time ?? entry.timestamp ?? 0
+	);
+	if (offsetMs > 0) {
+		return `${formatOffsetTimestamp(offsetMs)}\n${text}`;
+	}
+
+	return text;
 }
 
 function extractTranscript(detail: Record<string, unknown>): string {
@@ -217,7 +234,7 @@ function extractTranscript(detail: Record<string, unknown>): string {
 			.filter((line) => line.length > 0);
 
 		if (lines.length > 0) {
-			return lines.join('\n');
+			return lines.join('\n\n');
 		}
 	}
 

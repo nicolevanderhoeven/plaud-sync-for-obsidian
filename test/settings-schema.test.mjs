@@ -29,7 +29,7 @@ test('default settings expose full Plaud sync schema', () => {
   assert.equal(DEFAULT_SETTINGS.syncFolder, 'Plaud');
   assert.equal(DEFAULT_SETTINGS.syncOnStartup, true);
   assert.equal(DEFAULT_SETTINGS.updateExisting, true);
-  assert.equal(DEFAULT_SETTINGS.filenamePattern, 'plaud-{date}-{title}');
+  assert.equal(DEFAULT_SETTINGS.filenamePattern, 'plaud-{timestamp}');
   assert.equal(DEFAULT_SETTINGS.lastSyncAtMs, 0);
 });
 

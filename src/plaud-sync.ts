@@ -41,6 +41,7 @@ export interface RunPlaudSyncInput {
 		fileId: string;
 		title: string;
 		date: string;
+		startAtMs: number;
 		markdown: string;
 	}) => Promise<UpsertPlaudNoteResult>;
 }
@@ -140,6 +141,7 @@ export async function runPlaudSync(input: RunPlaudSyncInput): Promise<PlaudSyncS
 				fileId: normalized.fileId,
 				title: normalized.title,
 				date: formatDate(normalized.startAtMs),
+				startAtMs: normalized.startAtMs,
 				markdown
 			});
 

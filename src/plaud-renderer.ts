@@ -38,7 +38,7 @@ export function renderPlaudMarkdown(detail: NormalizedPlaudDetail): string {
 	const summary = detail.summary.trim() || 'No summary available.';
 	const transcript = detail.transcript.trim() || 'No transcript available.';
 
-	return [
+	const sections: string[] = [
 		'---',
 		'source: plaud',
 		'type: recording',
@@ -50,14 +50,24 @@ export function renderPlaudMarkdown(detail: NormalizedPlaudDetail): string {
 		'',
 		`# ${title}`,
 		'',
-		'## Summary',
 		summary,
-		'',
-		'## Highlights',
-		renderHighlights(detail.highlights),
-		'',
+		''
+	];
+
+	if (detail.highlights.length > 0) {
+		sections.push(
+			'## Highlights',
+			renderHighlights(detail.highlights),
+			''
+		);
+	}
+
+	sections.push(
 		'## Transcript',
+		'',
 		transcript,
 		''
-	].join('\n');
+	);
+
+	return sections.join('\n');
 }

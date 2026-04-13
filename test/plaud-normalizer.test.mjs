@@ -34,8 +34,8 @@ test('normalizes canonical fields into stable domain model', () => {
   assert.equal(normalized.durationMs, 600000);
   assert.equal(normalized.summary, 'Summary from pre download');
   assert.deepEqual(normalized.highlights, ['Action A', 'Action B']);
-  assert.match(normalized.transcript, /A: Hello/);
-  assert.match(normalized.transcript, /B: Hi/);
+  assert.match(normalized.transcript, /Hello/);
+  assert.match(normalized.transcript, /Hi/);
 });
 
 test('extracts summary from known pre_download_content_list fallback variants', () => {
@@ -70,6 +70,22 @@ test('extracts summary and highlights from pre_download_content_list data_id/dat
 
   assert.equal(normalized.summary, 'Legacy summary from data_content');
   assert.deepEqual(normalized.highlights, ['Point A', 'Point B']);
+});
+
+test('stripHtml preserves Markdown headings and structure from auto_sum content', () => {
+  const normalized = normalizePlaudDetail({
+    id: 'md-summary',
+    pre_download_content_list: [
+      {
+        data_id: 'auto_sum:structured',
+        data_content: '<div>## Life Log Narrative\nYour morning started with coffee.\n\n## Places Visited\n- Home\n- Office</div>'
+      }
+    ]
+  });
+
+  assert.match(normalized.summary, /## Life Log Narrative/);
+  assert.match(normalized.summary, /## Places Visited/);
+  assert.match(normalized.summary, /Your morning started with coffee\./);
 });
 
 test('supports highlights text fallback when not valid JSON', () => {
@@ -112,10 +128,41 @@ test('supports transcript extraction from object and array variants', () => {
     ]
   });
 
-  assert.match(fromObject.transcript, /S1: One/);
-  assert.match(fromObject.transcript, /S2: Two/);
-  assert.match(fromArray.transcript, /Speaker 1: Line 1/);
-  assert.match(fromArray.transcript, /Speaker 2: Line 2/);
+  assert.match(fromObject.transcript, /One/);
+  assert.match(fromObject.transcript, /Two/);
+  assert.match(fromArray.transcript, /Line 1/);
+  assert.match(fromArray.transcript, /Line 2/);
+});
+
+test('transcript entries with timestamps render HH:MM:SS before text', () => {
+  const normalized = normalizePlaudDetail({
+    id: 't-ts',
+    trans_result: {
+      paragraphs: [
+        {text: 'Hello world', start_time: 2242000},
+        {text: 'Second segment', start_time: 3713000}
+      ]
+    }
+  });
+
+  assert.match(normalized.transcript, /00:37:22\nHello world/);
+  assert.match(normalized.transcript, /01:01:53\nSecond segment/);
+});
+
+test('transcript entries without timestamps render text only', () => {
+  const normalized = normalizePlaudDetail({
+    id: 't-nots',
+    trans_result: {
+      paragraphs: [
+        {text: 'No timestamp here'},
+        {text: 'Also no timestamp'}
+      ]
+    }
+  });
+
+  assert.ok(!normalized.transcript.includes(':'), 'should not contain timestamp separators');
+  assert.match(normalized.transcript, /No timestamp here/);
+  assert.match(normalized.transcript, /Also no timestamp/);
 });
 
 test('gracefully handles malformed payloads', () => {

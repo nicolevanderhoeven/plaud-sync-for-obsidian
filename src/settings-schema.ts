@@ -12,7 +12,7 @@ export const DEFAULT_SETTINGS: PlaudPluginSettings = {
 	syncFolder: 'Plaud',
 	syncOnStartup: true,
 	updateExisting: true,
-	filenamePattern: 'plaud-{date}-{title}',
+	filenamePattern: 'plaud-{timestamp}',
 	lastSyncAtMs: 0
 };
 

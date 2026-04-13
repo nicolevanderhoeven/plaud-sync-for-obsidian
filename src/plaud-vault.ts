@@ -10,6 +10,7 @@ export interface BuildFilenameInput {
 	filenamePattern: string;
 	date: string;
 	title: string;
+	startAtMs: number;
 }
 
 export interface UpsertPlaudNoteInput {
@@ -20,6 +21,7 @@ export interface UpsertPlaudNoteInput {
 	fileId: string;
 	title: string;
 	date: string;
+	startAtMs: number;
 	markdown: string;
 }
 
@@ -40,6 +42,20 @@ function slugify(value: string): string {
 		.replace(/-+/g, '-');
 
 	return normalized || 'recording';
+}
+
+function sanitizeFilename(value: string): string {
+	return value
+		.replace(/[^a-zA-Z0-9._-]+/g, '-')
+		.replace(/-+/g, '-')
+		.replace(/^-+|-+$/g, '');
+}
+
+function formatTimestamp(timestampMs: number): string {
+	if (!Number.isFinite(timestampMs) || timestampMs <= 0) {
+		return '1970-01-01T000000Z';
+	}
+	return new Date(timestampMs).toISOString().replace(/:/g, '').replace(/\.\d{3}/, '');
 }
 
 function extractFrontmatter(content: string): string {
@@ -98,10 +114,12 @@ function withCollisionSuffix(fileName: string, suffix: number): string {
 }
 
 export function buildPlaudFilename(input: BuildFilenameInput): string {
-	const pattern = input.filenamePattern.trim() || 'plaud-{date}-{title}';
-	const replacedDate = pattern.replace(/\{date\}/g, input.date);
-	const filled = replacedDate.replace(/\{title\}/g, slugify(input.title));
-	const filename = slugify(filled).replace(/^-+|-+$/g, '');
+	const pattern = input.filenamePattern.trim() || 'plaud-{timestamp}';
+	const filled = pattern
+		.replace(/\{timestamp\}/g, formatTimestamp(input.startAtMs))
+		.replace(/\{date\}/g, input.date)
+		.replace(/\{title\}/g, slugify(input.title));
+	const filename = sanitizeFilename(filled);
 	return `${filename || 'plaud-recording'}.md`;
 }
 
@@ -142,7 +160,8 @@ export async function upsertPlaudNote(input: UpsertPlaudNoteInput): Promise<Upse
 	const initialFileName = buildPlaudFilename({
 		filenamePattern: input.filenamePattern,
 		date: input.date,
-		title: input.title
+		title: input.title,
+		startAtMs: input.startAtMs
 	});
 	const path = resolveAvailablePath(folder, initialFileName, existingSet);
 

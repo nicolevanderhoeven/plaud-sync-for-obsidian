@@ -43,10 +43,33 @@ test('buildPlaudFilename is deterministic and slug-safe', () => {
   const filename = buildPlaudFilename({
     filenamePattern: 'plaud-{date}-{title}',
     date: '2024-11-04',
-    title: 'Weekly Sync: Team / Product'
+    title: 'Weekly Sync: Team / Product',
+    startAtMs: 1730678400000
   });
 
   assert.equal(filename, 'plaud-2024-11-04-weekly-sync-team-product.md');
+});
+
+test('buildPlaudFilename supports {timestamp} token with ISO 8601 UTC format', () => {
+  const filename = buildPlaudFilename({
+    filenamePattern: 'plaud-{timestamp}',
+    date: '2024-11-04',
+    title: 'Weekly Sync',
+    startAtMs: 1730678400000
+  });
+
+  assert.match(filename, /^plaud-2024-11-04T\d{6}Z\.md$/);
+});
+
+test('buildPlaudFilename defaults to plaud-{timestamp} when pattern is empty', () => {
+  const filename = buildPlaudFilename({
+    filenamePattern: '',
+    date: '2024-11-04',
+    title: 'Test',
+    startAtMs: 1730678400000
+  });
+
+  assert.match(filename, /^plaud-2024-11-04T\d{6}Z\.md$/);
 });
 
 test('creates sync folder and new note when no existing file_id match', async () => {
@@ -60,6 +83,7 @@ test('creates sync folder and new note when no existing file_id match', async ()
     fileId: 'f_001',
     title: 'First Note',
     date: '2024-11-04',
+    startAtMs: 1730678400000,
     markdown: '---\nfile_id: f_001\n---\n\n# First Note\n'
   });
 
@@ -82,6 +106,7 @@ test('matches existing note by frontmatter file_id and updates in place', async 
     fileId: 'f_abc',
     title: 'Updated title',
     date: '2024-11-04',
+    startAtMs: 1730678400000,
     markdown: '---\nfile_id: f_abc\n---\n\nnew'
   });
 
@@ -104,6 +129,7 @@ test('matches existing note when frontmatter file_id is quoted', async () => {
     fileId: 'f_quoted',
     title: 'Quoted match',
     date: '2024-11-04',
+    startAtMs: 1730678400000,
     markdown: '---\nfile_id: f_quoted\n---\n\nnew'
   });
 
@@ -126,6 +152,7 @@ test('skips update when updateExisting=false but still resolves by file_id', asy
     fileId: 'f_skip',
     title: 'Ignored title',
     date: '2024-11-04',
+    startAtMs: 1730678400000,
     markdown: '---\nfile_id: f_skip\n---\n\nnew'
   });
 
@@ -149,6 +176,7 @@ test('applies collision-safe filename fallback for new notes', async () => {
     fileId: 'f_new',
     title: 'First Note',
     date: '2024-11-04',
+    startAtMs: 1730678400000,
     markdown: '---\nfile_id: f_new\n---\n\nnew'
   });
 
